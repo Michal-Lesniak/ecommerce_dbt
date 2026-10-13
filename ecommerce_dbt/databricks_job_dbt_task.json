@@ -1,0 +1,64 @@
+{
+  "name": "ecommerce_dbt_daily",
+  "email_notifications": {
+    "on_failure": ["data-engineering@ecommerce.internal"],
+    "no_alert_for_skipped_runs": true
+  },
+  "schedule": {
+    "quartz_cron_expression": "0 0 5 * * ?",
+    "timezone_id": "Europe/Warsaw",
+    "pause_status": "UNPAUSED"
+  },
+  "max_concurrent_runs": 1,
+  "tasks": [
+    {
+      "task_key": "dbt_snapshot",
+      "description": "Snapshot SCD2 dim_customers - musi wykonac sie PRZED dbt build zeby build widzial najnowszy wiersz.",
+      "dbt_task": {
+        "project_directory": "ecommerce_dbt",
+        "commands": [
+          "dbt deps",
+          "dbt snapshot --target prod"
+        ],
+        "schema": "snapshots",
+        "warehouse_id": "REPLACE_WITH_SQL_WAREHOUSE_ID",
+        "catalog": "ecommerce_prod",
+        "profiles_directory": "ecommerce_dbt"
+      },
+      "libraries": [
+        {"pypi": {"package": "dbt-databricks==1.8.7"}}
+      ],
+      "timeout_seconds": 900
+    },
+    {
+      "task_key": "dbt_build",
+      "description": "Pelny build warstwy Gold: staging -> intermediate -> marts + testy.",
+      "depends_on": [{"task_key": "dbt_snapshot"}],
+      "dbt_task": {
+        "project_directory": "ecommerce_dbt",
+        "commands": [
+          "dbt deps",
+          "dbt build --target prod --fail-fast"
+        ],
+        "schema": "gold",
+        "warehouse_id": "REPLACE_WITH_SQL_WAREHOUSE_ID",
+        "catalog": "ecommerce_prod",
+        "profiles_directory": "ecommerce_dbt"
+      },
+      "libraries": [
+        {"pypi": {"package": "dbt-databricks==1.8.7"}}
+      ],
+      "timeout_seconds": 3600
+    }
+  ],
+  "git_source": {
+    "git_url": "https://github.com/REPLACE_WITH_USERNAME/ecommerce_dbt",
+    "git_provider": "gitHub",
+    "git_branch": "main"
+  },
+  "tags": {
+    "project": "ecommerce_dbt",
+    "environment": "prod",
+    "team": "data-engineering"
+  }
+}

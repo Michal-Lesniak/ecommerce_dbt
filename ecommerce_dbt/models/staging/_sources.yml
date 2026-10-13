@@ -1,0 +1,74 @@
+version: 2
+
+sources:
+  - name: ecommerce_bronze
+    description: 'Warstwa Bronze projektu e-commerce w Unity Catalog. Zawiera surowe dane załadowane z systemów źródłowych (OLTP, CDC) — bez transformacji, w oryginalnych typach.'
+    catalog: ecommerce_dev
+    schema: bronze
+    loaded_at_field: ingested_at
+    freshness:
+      warn_after: { count: 24, period: hour }
+      error_after: { count: 48, period: hour }
+    tables:
+      - name: orders
+        description: 'Surowe zamówienia z systemu OLTP. Jeden wiersz = jedno zamówienie klienta. Status zamówienia ewoluuje w czasie (pending -> completed / cancelled).'
+        columns:
+          - name: order_id
+            description: 'Identyfikator zamówienia z systemu OLTP (klucz naturalny).'
+          - name: customer_id
+            description: 'Identyfikator klienta (FK do customers).'
+          - name: status
+            description: 'Status zamówienia: pending / completed / cancelled / refunded.'
+          - name: total_amount
+            description: 'Wartość zamówienia w PLN, przed dostawą.'
+          - name: ordered_at
+            description: 'Timestamp złożenia zamówienia przez klienta.'
+          - name: ingested_at
+            description: 'Timestamp załadowania rekordu do warstwy Bronze.'
+      - name: customers
+        description: 'Rejestr klientów sklepu. Klient jest tu widoczny w najnowszej wersji (bez historii — historia obsłużona w snapshot).'
+        columns:
+          - name: customer_id
+            description: 'Identyfikator klienta z systemu OLTP.'
+          - name: email
+            description: 'Adres e-mail klienta.'
+          - name: country
+            description: 'Kraj rejestracji klienta (kod ISO2).'
+          - name: created_at
+            description: 'Timestamp utworzenia konta.'
+          - name: updated_at
+            description: 'Timestamp ostatniej zmiany danych klienta — używany jako klucz snapshotu SCD2.'
+          - name: ingested_at
+            description: 'Timestamp załadowania do Bronze.'
+      - name: products
+        description: 'Katalog produktów. Zawiera aktywne i nieaktywne produkty; ceny w PLN.'
+        columns:
+          - name: product_id
+            description: 'Identyfikator produktu.'
+          - name: product_name
+            description: 'Nazwa produktu wyświetlana klientowi.'
+          - name: category
+            description: 'Kategoria produktu (najwyższy poziom).'
+          - name: subcategory
+            description: 'Podkategoria produktu.'
+          - name: unit_price
+            description: 'Cena jednostkowa produktu w PLN.'
+          - name: is_active
+            description: 'Czy produkt jest dostępny w sprzedaży.'
+          - name: updated_at
+            description: 'Timestamp ostatniej zmiany.'
+      - name: order_items
+        description: 'Pozycje zamówień. Jeden wiersz = jeden produkt na jednym zamówieniu (SKU × zamówienie).'
+        columns:
+          - name: order_item_id
+            description: 'Identyfikator pozycji (PK).'
+          - name: order_id
+            description: 'FK do orders.'
+          - name: product_id
+            description: 'FK do products.'
+          - name: quantity
+            description: 'Liczba sztuk zamówionego produktu.'
+          - name: unit_price
+            description: 'Cena jednostkowa w momencie złożenia zamówienia (może różnić się od aktualnej ceny w katalogu).'
+          - name: ingested_at
+            description: 'Timestamp załadowania do Bronze.'

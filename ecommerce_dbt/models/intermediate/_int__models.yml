@@ -1,0 +1,28 @@
+version: 2
+
+models:
+  - name: int_orders_enriched
+    description: 'Model intermediate (ephemeral) — łączy stg_orders z agregatami stg_order_items (items_count, total_quantity, items_value_pln) i danymi klienta (country, email). Kanoniczne źródło dla fct_orders i fct_customer_clv.'
+    columns:
+      - name: order_id
+        description: 'Identyfikator zamówienia (z stg_orders).'
+      - name: customer_id
+        description: 'Identyfikator klienta (FK).'
+      - name: customer_country
+        description: 'Kod kraju klienta (do agregacji w fct_daily_revenue).'
+      - name: customer_email
+        description: 'Email klienta (znormalizowany).'
+      - name: order_status
+        description: 'Status zamówienia.'
+      - name: total_amount_pln
+        description: 'Wartość zamówienia w PLN (z stg_orders).'
+      - name: items_count
+        description: 'Liczba unikalnych produktów (SKU) w zamówieniu.'
+      - name: total_quantity
+        description: 'Łączna liczba sztuk (sum(quantity)).'
+      - name: items_value_pln
+        description: 'Wartość pozycji policzona z quantity * unit_price z stg_order_items — do audytu vs total_amount_pln.'
+      - name: ordered_at
+        description: 'Timestamp złożenia zamówienia.'
+      - name: order_date
+        description: 'Data zamówienia (partycjonowanie).'

@@ -1,0 +1,135 @@
+version: 2
+
+models:
+  - name: stg_orders
+    description: 'Oczyszczone zamówienia z Bronze — kastowanie typów, normalizacja statusu (lower+trim), wyliczony order_date, filtry NULL na PK i FK oraz sensowność total_amount >= 0.'
+    columns:
+      - name: order_id
+        description: 'Identyfikator zamówienia — klucz naturalny (bigint).'
+        data_tests:
+          - not_null
+          - unique
+      - name: customer_id
+        description: 'Identyfikator klienta (FK do stg_customers).'
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_id
+              severity: warn
+      - name: order_status
+        description: 'Znormalizowany status zamówienia (lower+trim).'
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['pending', 'completed', 'cancelled', 'refunded']
+      - name: total_amount_pln
+        description: 'Wartość zamówienia w PLN (decimal(12,2)).'
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+              severity: warn
+      - name: ordered_at
+        description: 'Timestamp złożenia zamówienia.'
+        data_tests:
+          - not_null
+      - name: order_date
+        description: 'Data zamówienia wyliczona z ordered_at (partycjonowanie po dacie).'
+
+  - name: stg_customers
+    description: 'Oczyszczony rejestr klientów — email znormalizowany (lower+trim), kod kraju uppercase, filtr NULL na PK.'
+    columns:
+      - name: customer_id
+        description: 'Identyfikator klienta (PK, bigint).'
+        data_tests:
+          - not_null
+          - unique
+      - name: email
+        description: 'Adres e-mail klienta w formacie znormalizowanym.'
+        data_tests:
+          - not_null
+          - unique
+          - dbt_expectations.expect_column_values_to_match_regex:
+              regex: "^[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}$"
+              severity: warn
+      - name: country
+        description: 'Kod kraju rejestracji (ISO2, uppercase).'
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['PL', 'DE', 'CZ', 'SK', 'HU', 'RO', 'UA', 'AT']
+              severity: warn
+      - name: created_at
+        description: 'Timestamp utworzenia konta klienta.'
+        data_tests:
+          - not_null
+      - name: updated_at
+        description: 'Timestamp ostatniej zmiany danych klienta — klucz snapshotu SCD2.'
+        data_tests:
+          - not_null
+
+  - name: stg_products
+    description: 'Oczyszczony katalog produktów — trim nazw, lowercase kategorii, cast cen do decimal.'
+    columns:
+      - name: product_id
+        description: 'Identyfikator produktu (PK).'
+        data_tests:
+          - not_null
+          - unique
+      - name: product_name
+        description: 'Nazwa produktu (po trim).'
+        data_tests:
+          - not_null
+      - name: category
+        description: 'Kategoria produktu (lowercase).'
+      - name: subcategory
+        description: 'Podkategoria produktu (lowercase).'
+      - name: unit_price_pln
+        description: 'Cena jednostkowa w PLN.'
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+      - name: is_active
+        description: 'Flaga aktywności produktu.'
+      - name: updated_at
+        description: 'Timestamp ostatniej zmiany produktu.'
+
+  - name: stg_order_items
+    description: 'Oczyszczone pozycje zamówień — cast typów, filtry NULL na PK i FK, quantity > 0.'
+    columns:
+      - name: order_item_id
+        description: 'Identyfikator pozycji zamówienia (PK).'
+        data_tests:
+          - not_null
+          - unique
+      - name: order_id
+        description: 'FK do stg_orders.'
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_orders')
+              field: order_id
+      - name: product_id
+        description: 'FK do stg_products.'
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_products')
+              field: product_id
+              severity: warn
+      - name: quantity
+        description: 'Liczba sztuk produktu w pozycji.'
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+      - name: unit_price
+        description: 'Cena jednostkowa w momencie złożenia zamówienia.'
+        data_tests:
+          - not_null

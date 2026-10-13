@@ -1,0 +1,89 @@
+version: 2
+
+models:
+  - name: fct_daily_revenue
+    description: 'Fakt dziennego przychodu. Grain: 1 wiersz = 1 data × 1 kraj. Materializacja: table. Liczone TYLKO z zamówień completed — pending / cancelled / refunded nie generują przychodu.'
+    columns:
+      - name: date_id
+        description: 'Data (grain, FK do dim_date).'
+        data_tests:
+          - not_null
+      - name: country
+        description: 'Kod kraju (grain).'
+        data_tests:
+          - not_null
+      - name: revenue_pln
+        description: 'Suma total_amount_pln dla completed w danym dniu i kraju.'
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: orders_count
+        description: 'Liczba zamówień completed w danym dniu × kraju.'
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+      - name: unique_customers
+        description: 'Liczba unikalnych klientów, którzy złożyli completed w danym dniu × kraju.'
+      - name: aov_pln
+        description: 'Average Order Value = revenue_pln / orders_count.'
+      - name: dbt_loaded_at
+        description: 'Timestamp załadowania przez dbt.'
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - date_id
+            - country
+
+  - name: fct_customer_clv
+    description: 'Customer Lifetime Value. Grain: 1 wiersz = 1 klient. Materializacja: table. total_orders liczy WSZYSTKIE statusy, ale total_revenue_pln TYLKO completed. Flaga is_active_last_90d = ostatnie zamówienie w ciągu 90 dni.'
+    columns:
+      - name: customer_sk
+        description: 'Surrogate key klienta (FK do dim_customers).'
+        data_tests:
+          - not_null
+          - unique
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_sk
+      - name: customer_id
+        description: 'Naturalny identyfikator klienta.'
+        data_tests:
+          - not_null
+          - unique
+      - name: customer_country
+        description: 'Kod kraju klienta.'
+      - name: first_order_date
+        description: 'Data pierwszego zamówienia (dowolny status).'
+      - name: last_order_date
+        description: 'Data ostatniego zamówienia (dowolny status).'
+      - name: total_orders
+        description: 'Liczba wszystkich zamówień klienta (dowolny status).'
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: completed_orders
+        description: 'Liczba zamówień completed.'
+        data_tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: total_revenue_pln
+        description: 'Suma total_amount_pln WYŁĄCZNIE z zamówień completed.'
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 10000000
+              severity: warn
+      - name: days_active
+        description: 'Liczba dni pomiędzy first_order_date a last_order_date.'
+      - name: is_active_last_90d
+        description: 'Flaga: klient aktywny (złożył zamówienie) w ostatnich 90 dniach.'
+      - name: revenue_bucket
+        description: 'Kubełek przychodowy (wynik makra revenue_bucket).'
+      - name: dbt_loaded_at
+        description: 'Timestamp załadowania przez dbt.'

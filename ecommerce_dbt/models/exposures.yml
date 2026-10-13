@@ -1,0 +1,35 @@
+version: 2
+
+exposures:
+  - name: dashboard_ecommerce_gold
+    type: dashboard
+    maturity: high
+    url: https://app.powerbi.com/groups/ecommerce/reports/gold-overview
+    description: |
+      Główny dashboard Power BI działu analityki e-commerce.
+      Zasilany warstwą Gold — pokazuje przychody dzienne (fct_daily_revenue),
+      segmentację klientów (fct_customer_clv) oraz ranking produktów (dim_products).
+      SLA odświeżania: dane widoczne w BI do 08:00 CET codziennie.
+    owner:
+      name: Michał Leśniak
+      email: michal.lesniak.2001@gmail.com
+    depends_on:
+      - ref('fct_daily_revenue')
+      - ref('fct_customer_clv')
+      - ref('dim_customers')
+      - ref('dim_products')
+      - ref('dim_date')
+
+  - name: ml_customer_churn_model
+    type: ml
+    maturity: medium
+    description: |
+      Model predykcji churnu klientów (scikit-learn, retrenowany co tydzień).
+      Feature set budowany z fct_customer_clv (recency = last_order_date,
+      frequency = total_orders, monetary = total_revenue_pln, is_active_last_90d, revenue_bucket).
+    owner:
+      name: ML Team
+      email: ml@ecommerce.internal
+    depends_on:
+      - ref('fct_customer_clv')
+      - ref('dim_customers')

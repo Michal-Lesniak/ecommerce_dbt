@@ -1,0 +1,45 @@
+name: 'ecommerce'
+version: '1.0.0'
+config-version: 2
+
+profile: 'ecommerce'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+analysis-paths: ["analyses"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+vars:
+  start_date: '2023-01-01'
+  current_country_default: 'PL'
+
+models:
+  ecommerce:
+    staging:
+      +materialized: view
+      +schema: staging
+    intermediate:
+      +materialized: ephemeral
+    marts:
+      core:
+        +materialized: table
+        +schema: gold
+      analytics:
+        +materialized: table
+        +schema: gold
+
+snapshots:
+  ecommerce:
+    +target_schema: snapshots
+    +strategy: timestamp
+    +updated_at: updated_at
+
+tests:
+  +store_failures: true
+  +schema: dbt_test_failures

@@ -1,0 +1,155 @@
+version: 2
+
+models:
+  - name: dim_customers
+    description: 'Wymiar klientów w warstwie Gold — jeden wiersz na klienta w najnowszej wersji. Zawiera surrogate key oraz mapowanie kodu kraju na polską nazwę. Historia zmian trzymana w snapshot dim_customers_snapshot.'
+    columns:
+      - name: customer_sk
+        description: 'Surrogate key wyliczony z customer_id przez dbt_utils.generate_surrogate_key.'
+        data_tests:
+          - not_null
+          - unique
+      - name: customer_id
+        description: 'Naturalny identyfikator klienta z systemu OLTP.'
+        data_tests:
+          - not_null
+          - unique
+      - name: email
+        description: 'Znormalizowany adres e-mail klienta.'
+        data_tests:
+          - not_null
+          - unique
+      - name: country
+        description: 'Kod kraju rejestracji (ISO2).'
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['PL', 'DE', 'CZ', 'SK', 'HU', 'RO', 'UA', 'AT']
+              severity: warn
+      - name: country_name
+        description: 'Nazwa kraju w języku polskim (do wyświetlania w BI).'
+      - name: created_at
+        description: 'Timestamp utworzenia konta.'
+        data_tests:
+          - not_null
+      - name: updated_at
+        description: 'Timestamp ostatniej zmiany danych klienta.'
+      - name: dbt_loaded_at
+        description: 'Timestamp załadowania wiersza przez dbt (audyt).'
+
+  - name: dim_products
+    description: 'Wymiar produktów — jeden wiersz na produkt. Wzbogacony o price_tier (koszyk cenowy) wyliczony makrem price_tier().'
+    columns:
+      - name: product_sk
+        description: 'Surrogate key wyliczony z product_id.'
+        data_tests:
+          - not_null
+          - unique
+      - name: product_id
+        description: 'Naturalny identyfikator produktu.'
+        data_tests:
+          - not_null
+          - unique
+      - name: product_name
+        description: 'Nazwa produktu.'
+        data_tests:
+          - not_null
+      - name: category
+        description: 'Kategoria produktu (lowercase).'
+      - name: subcategory
+        description: 'Podkategoria produktu.'
+      - name: unit_price_pln
+        description: 'Cena jednostkowa w PLN.'
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: price_tier
+        description: 'Koszyk cenowy: budget / standard / premium / luxury (wynik makra price_tier).'
+        data_tests:
+          - accepted_values:
+              values: ['budget', 'standard', 'premium', 'luxury']
+      - name: is_active
+        description: 'Flaga aktywności produktu.'
+      - name: dbt_loaded_at
+        description: 'Timestamp załadowania wiersza przez dbt.'
+
+  - name: dim_date
+    description: 'Wymiar kalendarza dat od var(start_date) do dziś + 5 lat. Wygenerowany dbt_utils.date_spine. Zawiera flagi weekendu i stałych świąt PL (makro is_pl_holiday).'
+    columns:
+      - name: date_id
+        description: 'Data (PK wymiaru).'
+        data_tests:
+          - not_null
+          - unique
+      - name: year
+        description: 'Rok kalendarzowy.'
+      - name: quarter
+        description: 'Kwartał (1–4).'
+      - name: month
+        description: 'Numer miesiąca (1–12).'
+      - name: week
+        description: 'Tydzień w roku (1–53).'
+      - name: day_of_month
+        description: 'Dzień miesiąca (1–31).'
+      - name: day_of_week
+        description: 'Dzień tygodnia (Spark: 1 = niedziela, 7 = sobota).'
+      - name: is_weekend
+        description: 'Flaga: true jeśli sobota lub niedziela.'
+      - name: is_pl_holiday
+        description: 'Flaga stałych świąt państwowych PL (wynik makra is_pl_holiday).'
+      - name: year_month
+        description: 'Format yyyy-MM — do partycji i wykresów miesięcznych.'
+      - name: day_name_en
+        description: 'Nazwa dnia tygodnia po angielsku (Monday, Tuesday…).'
+
+  - name: fct_orders
+    description: 'Tabela faktów zamówień. Grain: 1 wiersz = 1 zamówienie. Materializacja incremental (merge, unique_key=order_sk) — status zamówienia zmienia się w czasie, merge nadpisuje istniejący wiersz. Idempotentny filtr is_incremental() na ordered_at z 3-dniową zakładką na korekty wsteczne.'
+    columns:
+      - name: order_sk
+        description: 'Surrogate key zamówienia (unique_key dla merge).'
+        data_tests:
+          - not_null
+          - unique
+      - name: order_id
+        description: 'Naturalny identyfikator zamówienia.'
+        data_tests:
+          - not_null
+          - unique
+      - name: customer_sk
+        description: 'FK do dim_customers.'
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_sk
+      - name: customer_id
+        description: 'Naturalny identyfikator klienta (redundantny — do konsumpcji przez BI bez join).'
+      - name: customer_country
+        description: 'Kod kraju klienta (denormalizacja — do agregatów dziennych).'
+      - name: order_status
+        description: 'Status zamówienia w chwili załadowania.'
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['pending', 'completed', 'cancelled', 'refunded']
+      - name: total_amount_pln
+        description: 'Wartość zamówienia w PLN.'
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: price_tier
+        description: 'Koszyk cenowy zamówienia (makro price_tier).'
+      - name: items_count
+        description: 'Liczba unikalnych SKU w zamówieniu.'
+      - name: total_quantity
+        description: 'Łączna liczba sztuk w zamówieniu.'
+      - name: ordered_at
+        description: 'Timestamp złożenia zamówienia (klucz dla filtra incremental).'
+        data_tests:
+          - not_null
+      - name: order_date
+        description: 'Data zamówienia — join do dim_date.'
+      - name: dbt_loaded_at
+        description: 'Timestamp załadowania wiersza przez dbt.'
