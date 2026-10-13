@@ -1,0 +1,59 @@
+name: dbt Deploy Prod
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ecommerce_dbt/**'
+  workflow_dispatch:
+
+env:
+  DBT_PROFILES_DIR: ./ecommerce_dbt
+  DBT_TARGET: prod
+
+jobs:
+  deploy-prod:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ecommerce_dbt
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalacja dbt-databricks
+        run: |
+          pip install --upgrade pip
+          pip install dbt-databricks==1.8.7
+
+      - name: Instalacja paczek dbt
+        run: dbt deps
+
+      - name: dbt snapshot (prod)
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HTTP_PATH_PROD: ${{ secrets.DATABRICKS_HTTP_PATH_PROD }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: dbt snapshot --target prod
+
+      - name: dbt build (prod)
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HTTP_PATH_PROD: ${{ secrets.DATABRICKS_HTTP_PATH_PROD }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: dbt build --target prod
+
+      - name: Upload manifest jako artefakt (Slim CI reference)
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-manifest
+          path: ecommerce_dbt/target/manifest.json
+          retention-days: 30
